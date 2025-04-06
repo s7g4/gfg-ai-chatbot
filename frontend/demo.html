@@ -36,6 +36,37 @@
     <h1>Multi-Agent Customer Support Demo</h1>
     
     <div class="agent">
+        <h3>Setup Instructions</h3>
+        <h4>Prerequisites:</h4>
+        <ol>
+            <li>Python 3.7+</li>
+            <li>MongoDB (or use the built-in mock database for testing)</li>
+        </ol>
+        
+        <h4>Backend Setup:</h4>
+        <ol>
+            <li>Install requirements: <code>pip install -r backend/requirements.txt</code></li>
+            <li>Create .env file in backend folder with:
+                <pre>SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30</pre>
+            </li>
+            <li>Run backend: <code>python backend/main.py</code></li>
+            <li>API will be available at <a href="http://localhost:8000">http://localhost:8000</a></li>
+        </ol>
+        
+        <h4>Frontend Setup:</h4>
+        <ol>
+            <li>Install live server (or use Python's http.server)</li>
+            <li>Run: <code>python -m http.server 3000</code> in frontend folder</li>
+            <li>Access demo at <a href="http://localhost:3000/demo.html">http://localhost:3000/demo.html</a></li>
+        </ol>
+        
+        <h4>Testing Credentials:</h4>
+        <p>Username: test<br>Password: secret</p>
+    </div>
+    
+    <div class="agent">
         <h3>Emotion Analyzer</h3>
         <textarea id="userInput" placeholder="Type your message..."></textarea>
         <button onclick="analyzeEmotion()">Analyze</button>
