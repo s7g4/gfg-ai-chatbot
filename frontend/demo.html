@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Support System Demo</title>
+    <style>
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .agent { padding: 10px; }
+        }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .agent { 
+            background: #f5f5f5; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .response { 
+            color: #0066cc; 
+            margin-top: 5px;
+            font-weight: 500;
+        }
+        h1 { color: #2c3e50; }
+        h3 { color: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>Multi-Agent Customer Support Demo</h1>
+    
+    <div class="agent">
+        <h3>Emotion Analyzer</h3>
+        <textarea id="userInput" placeholder="Type your message..."></textarea>
+        <button onclick="analyzeEmotion()">Analyze</button>
+        <div id="emotionResult" class="response"></div>
+    </div>
+    <script>
+    function analyzeEmotion() {
+        const text = document.getElementById('userInput').value;
+        fetch('http://localhost:8000/analyze_emotion', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({text: text}),
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('emotionResult').innerHTML = `
+                Detected: ${data.emotion} (${data.confidence}%)<br>
+                System response: ${data.response}
+            `;
+        });
+    }
+    </script>
+
+    <div class="agent">
+        <h3>AI Negotiator</h3>
+        <p>User: "I want a full refund"</p>
+        <p class="response">Offering: 50% refund + free month subscription</p>
+    </div>
+
+    <div class="agent">
+        <h3>Digital Twin</h3>
+        <p>Welcome back, Sarah! Last interaction: 3 days ago (billing issue)</p>
+        <p class="response">Suggesting: Check your updated invoice</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,18 @@
+fastapi
+uvicorn
+pymongo
+python-jose
+python-multipart
+bcrypt==4.1.2
+python-dotenv>=0.19.0
+slowapi==0.1.8
+transformers==4.28.1  # Last version supporting Python 3.7
+torch==1.13.1  # Compatible with Python 3.7
+sentence-transformers==2.2.0  # Compatible with transformers 4.28.1
+textblob==0.17.1
+nltk==3.8.1
+pydantic==2.5.3
+soundfile==0.12.1
+librosa==0.10.1
+pyaudioanalysis==0.3.14
+SpeechRecognition==3.9.0  # Last version supporting Python 3.7

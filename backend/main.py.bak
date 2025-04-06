@@ -1,0 +1,381 @@
+from fastapi import FastAPI, Depends, HTTPException, status, Body, Request, Response
+from fastapi.middleware import Middleware
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from pydantic import BaseModel, constr
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import jwt, JWTError
+from pymongo import MongoClient
+from datetime import datetime, timedelta
+import bcrypt
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+app = FastAPI(middleware=[
+    Middleware(CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+])
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter, _rate_limit_exceeded_handler
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+try:
+    client = MongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
+    client.server_info()  # Test connection
+    db = client[os.getenv("DATABASE_NAME")]
+    users = db.users
+except Exception as e:
+    raise RuntimeError(f"Failed to connect to MongoDB: {str(e)}")
+
+def authenticate_user(username: str, password: str):
+    user = users.find_one({"username": username})
+    if not user:
+        return None
+    if not bcrypt.checkpw(password.encode('utf-8'), user["password"].encode('utf-8')):
+        return None
+    return user
+
+def create_token(data: dict):
+    to_encode = data.copy()
+    to_encode.update({"exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_token(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid Token")
+
+@app.post("/login")
+@limiter.limit("10/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    token = create_token({"sub": form_data.username})
+    return {"token": token}
+
+from models import UserRegister
+
+@app.post("/voice-analyze")
+@limiter.limit("20/minute")
+def analyze_voice(
+    request: Request,
+    voice_data: VoiceAnalysisRequest = Body(...),
+    username: str = Depends(verify_token)
+):
+    """Analyze voice for emotional content"""
+    try:
+        import base64
+        from io import BytesIO
+        
+        # Decode base64 audio
+        audio_bytes = base64.b64decode(voice_data.audio_data)
+        
+        # Load audio
+        audio, sr = sf.read(BytesIO(audio_bytes))
+        if len(audio.shape) > 1:  # Convert stereo to mono
+            audio = np.mean(audio, axis=1)
+            
+        # Extract features
+        features = analyze_voice_features(audio, voice_data.sample_rate)
+        
+        # Get emotion prediction (simplified example)
+        emotion = "neutral"
+        if features["pitch"] > 200 and features["intensity"] > 0.1:
+            emotion = "excited"
+        elif features["pitch"] < 100 and features["intensity"] < 0.05:
+            emotion = "sad"
+            
+        return {
+            "features": features,
+            "predicted_emotion": emotion,
+            "sample_rate": sr
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Voice analysis error: {str(e)}")
+
+@app.post("/register")
+@limiter.limit("5/minute")
+def register(request: Request, user_data: UserRegister = Body(...)):
+    username = user_data.username
+    password = user_data.password
+    try:
+        # Verify database connection first
+        client.admin.command('ping')
+        
+        if users.find_one({"username": username}):
+            raise HTTPException(status_code=400, detail="Username already exists")
+        
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        result = users.insert_one({
+            "username": username,
+            "password": hashed_password,
+            "created_at": datetime.utcnow()
+        })
+        
+        if not result.inserted_id:
+            raise HTTPException(status_code=500, detail="Failed to create user")
+            
+        return {"message": "User registered successfully"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # Log full stack trace
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+# Create messages collection if it doesn't exist
+messages = db.messages
+
+from pydantic import BaseModel
+from typing import Optional, constr
+import numpy as np
+import soundfile as sf
+import librosa
+
+# Define models first to avoid circular imports
+class EmotionAnalysisRequest(BaseModel):
+    text: constr(min_length=1, max_length=500)
+
+class VoiceAnalysisRequest(BaseModel):
+    audio_data: str  # Base64 encoded audio
+    sample_rate: Optional[int] = 16000
+
+# Now import other dependencies
+from fastapi import FastAPI, Request, HTTPException, Depends, Body
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from emotion_analyzer import EmotionAnalyzer, EmotionAnalysisResult
+from negotiation_engine import NegotiationEngine, NegotiationStrategy
+from digital_twin import DigitalTwin
+from ethical_monitor import EthicalMonitor
+
+emotion_analyzer = EmotionAnalyzer()
+negotiation_engine = NegotiationEngine()
+digital_twin = DigitalTwin()
+ethical_monitor = EthicalMonitor()
+
+class EmotionAnalysisRequest(BaseModel):
+    text: constr(min_length=1, max_length=500)
+
+class VoiceAnalysisRequest(BaseModel):
+    audio_data: str  # Base64 encoded audio
+    sample_rate: Optional[int] = 16000
+
+def analyze_voice_features(audio_data: np.ndarray, sample_rate: int) -> dict:
+    """Extract voice features for emotion analysis"""
+    # Extract MFCC features
+    mfcc = librosa.feature.mfcc(
+        y=audio_data, 
+        sr=sample_rate,
+        n_mfcc=13
+    )
+    
+    # Extract pitch and intensity
+    pitches, magnitudes = librosa.piptrack(
+        y=audio_data,
+        sr=sample_rate
+    )
+    pitch_mean = np.mean(pitches[pitches > 0])
+    intensity = np.mean(librosa.feature.rms(y=audio_data))
+    
+    return {
+        "mfcc": mfcc.tolist(),
+        "pitch": float(pitch_mean) if not np.isnan(pitch_mean) else 0,
+        "intensity": float(intensity),
+        "speech_rate": len(librosa.effects.split(audio_data, top_db=20)) / (len(audio_data) / sample_rate)
+    }
+
+@app.post("/analyze")
+@limiter.limit("30/minute")
+def analyze_emotion(
+    request: Request, 
+    analysis_data: EmotionAnalysisRequest = Body(...),
+    username: str = Depends(verify_token)
+) -> EmotionAnalysisResult:
+    """Analyze text for emotional content"""
+    try:
+        return emotion_analyzer.analyze_text(analysis_data.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Emotion analysis error: {str(e)}")
+
+def generate_ai_response(username: str, user_message: str) -> str:
+    """Generate advanced AI response with emotion detection and negotiation"""
+    # Analyze user's emotional state
+    emotion_data = emotion_analyzer.analyze_text(user_message)
+    
+    # Determine negotiation strategy
+    strategy = negotiation_engine.determine_strategy(emotion_data.dict())
+    
+    # Generate base response
+    base_response = negotiation_engine.generate_response(strategy, user_message)
+    
+    # Personalize response using digital twin
+    personalized_response = digital_twin.get_personalized_response(username, base_response)
+    
+    # Update user profile
+    digital_twin.update_profile(username, {
+        "tone": emotion_data.emotion,
+        "issue": negotiation_engine._extract_issue(user_message),
+        "emotion_scores": emotion_data.emotion_scores
+    })
+    
+    # Log interaction
+    digital_twin.log_interaction(username, user_message, personalized_response)
+    
+    # Save message to database
+    messages.insert_one({
+        "username": username,
+        "user_message": user_message,
+        "ai_response": personalized_response,
+        "timestamp": datetime.utcnow()
+    })
+    
+    return personalized_response
+
+class ChatInput(BaseModel):
+    user_input: constr(min_length=1, max_length=500)
+
+@app.post("/chat")
+@limiter.limit("30/minute")
+def chat(request: Request, chat_data: ChatInput = Body(...), username: str = Depends(verify_token)):
+    try:
+        user_message = chat_data.user_input
+        ai_response = generate_ai_response(username, user_message)
+        # Ethical monitoring
+        ethical_check = ethical_monitor.check_response(username, user_message, ai_response)
+        
+        return {
+            "ai_response": ai_response,
+            "emotion_analysis": emotion_analyzer.analyze_text(user_message).dict(),
+            "ethical_check": {
+                "flags": ethical_check["flags"],
+                "risk_score": ethical_check["risk_score"],
+                "needs_review": ethical_check["needs_review"]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat processing error: {str(e)}")
+
+class AnalyticsTimeRange(BaseModel):
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+@app.get("/analytics/emotion-trends")
+@limiter.limit("30/minute")
+def get_emotion_trends(
+    request: Request,
+    time_range: AnalyticsTimeRange = Depends(),
+    username: str = Depends(verify_token)
+):
+    """Get emotion trends over time"""
+    try:
+        query = {"username": username}
+        if time_range.start_date or time_range.end_date:
+            query["emotion_history.timestamp"] = {}
+            if time_range.start_date:
+                query["emotion_history.timestamp"]["$gte"] = time_range.start_date
+            if time_range.end_date:
+                query["emotion_history.timestamp"]["$lte"] = time_range.end_date
+
+        pipeline = [
+            {"$match": query},
+            {"$unwind": "$emotion_history"},
+            {"$group": {
+                "_id": "$emotion_history.emotion",
+                "count": {"$sum": 1},
+                "avg_score": {"$avg": "$emotion_history.scores"}
+            }},
+            {"$project": {
+                "emotion": "$_id",
+                "count": 1,
+                "avg_score": 1,
+                "_id": 0
+            }}
+        ]
+
+        results = list(digital_twin.user_profiles.aggregate(pipeline))
+        return {"emotion_trends": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+
+@app.get("/analytics/interaction-stats")
+@limiter.limit("30/minute")
+def get_interaction_stats(
+    request: Request,
+    time_range: AnalyticsTimeRange = Depends(),
+    username: str = Depends(verify_token)
+):
+    """Get interaction statistics"""
+    try:
+        query = {"username": username}
+        if time_range.start_date or time_range.end_date:
+            query["timestamp"] = {}
+            if time_range.start_date:
+                query["timestamp"]["$gte"] = time_range.start_date
+            if time_range.end_date:
+                query["timestamp"]["$lte"] = time_range.end_date
+
+        pipeline = [
+            {"$match": query},
+            {"$facet": {
+                "total_interactions": [{"$count": "count"}],
+                "by_hour": [
+                    {"$group": {
+                        "_id": {"$hour": "$timestamp"},
+                        "count": {"$sum": 1}
+                    }},
+                    {"$sort": {"_id": 1}}
+                ],
+                "common_issues": [
+                    {"$unwind": "$issue_history"},
+                    {"$group": {
+                        "_id": "$issue_history",
+                        "count": {"$sum": 1}
+                    }},
+                    {"$sort": {"count": -1}},
+                    {"$limit": 5}
+                ]
+            }}
+        ]
+
+        results = list(digital_twin.user_profiles.aggregate(pipeline))
+        return {
+            "stats": results[0] if results else {}
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+
+@app.get("/history")
+@limiter.limit("60/minute")
+def get_chat_history(request: Request, username: str = Depends(verify_token)):
+    """Get chat history for the authenticated user"""
+    user_messages = list(messages.find(
+        {"username": username},
+        {"_id": 0, "user_message": 1, "ai_response": 1, "timestamp": 1}
+    ).sort("timestamp", -1).limit(20))
+    return {"history": user_messages}
